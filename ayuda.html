@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>Planos NABLA · Ayuda</title>
+<style>body{font-family:Segoe UI,Arial,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1f2937;line-height:1.5}
+h1{color:#0b4f4a}code{background:#f3f4f6;padding:1px 4px;border-radius:3px}</style></head>
+<body>
+<h1>Planos NABLA</h1>
+<p>Extensión de Trimble Connect que colorea el modelo según la <b>revisión de planos PDF vs listado vigente</b> (Excel «Revision_Planos_PDF.xlsm», hoja «Resultado»).</p>
+<ul>
+<li><b style="color:#2EAA4A">Verde</b> – Plano entregado (OK)</li>
+<li><b style="color:#F28C28">Naranja</b> – Por revisar (REVISAR / FALTA NC)</li>
+<li><b style="color:#D93025">Rojo</b> – Falta plano (FALTA PDF)</li>
+<li><b style="color:#9ca3af">Gris</b> – La marca del modelo no está en la revisión</li>
+</ul>
+<p>La extensión toma el Excel más reciente de <code>5_FAB/5.3_LISTADOS</code> cuyo nombre contenga «Revision_Planos». Puede colorear por <b>ensambles</b> o por <b>piezas sueltas</b>. La configuración está en <code>config.js</code>.</p>
+</body></html>

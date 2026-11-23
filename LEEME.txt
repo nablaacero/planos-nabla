@@ -1,0 +1,5 @@
+PLANOS NABLA - extensión de Trimble Connect
+Archivos: index.html, app.js, logica.js, config.js, manifest.json, icono-planos.png, ayuda.html, xlsx.full.min.js
+Repositorio GitHub: nablaacero/planos-nabla (público, GitHub Pages desde main / root)
+Dirección para Trimble Connect: https://nablaacero.github.io/planos-nabla/manifest.json
+Datos: Excel más reciente de 5_FAB/5.3_LISTADOS con "Revision_Planos" en el nombre (hoja Resultado).

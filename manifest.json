@@ -1,0 +1,8 @@
+{
+  "title": "Planos NABLA",
+  "description": "Colorea el modelo según la revisión de planos PDF vs listado vigente: plano entregado, por revisar o falta plano.",
+  "url": "https://nablaacero.github.io/planos-nabla/index.html",
+  "icon": "https://nablaacero.github.io/planos-nabla/icono-planos.png",
+  "infoUrl": "https://nablaacero.github.io/planos-nabla/ayuda.html",
+  "extensionType": ["3dviewer"]
+}

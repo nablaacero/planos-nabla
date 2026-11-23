@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planos NABLA</title>
+<link rel="icon" href="icono-planos.png">
+<style>
+  :root { --azul:#0b4f4a; --naranja:#e8622c; --gris:#f3f4f6; --borde:#d9dce1; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI", Arial, sans-serif; font-size:13px; color:#1f2937; background:#fff; }
+  header { background:var(--azul); color:#fff; padding:10px 12px; border-bottom:3px solid var(--naranja); }
+  header h1 { margin:0; font-size:15px; font-weight:600; }
+  header small { opacity:.8; }
+  section { padding:10px 12px; border-bottom:1px solid var(--borde); }
+  label { display:block; font-size:11px; color:#6b7280; margin:6px 0 2px; text-transform:uppercase; letter-spacing:.03em; }
+  input[type=text], select { width:100%; padding:6px 8px; border:1px solid var(--borde); border-radius:4px; font-size:13px; }
+  .fila { display:flex; gap:6px; margin-top:8px; }
+  button { flex:1; padding:7px 8px; border:1px solid var(--azul); background:#fff; color:var(--azul); border-radius:4px;
+           font-size:12px; font-weight:600; cursor:pointer; }
+  button.prim { background:var(--azul); color:#fff; }
+  button:disabled { opacity:.5; cursor:default; }
+  #estado { font-size:12px; color:#374151; min-height:18px; }
+  #estado.error { color:#b91c1c; }
+  .sw { width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,.2); flex:none; }
+  .leyenda .n { margin-left:auto; font-variant-numeric: tabular-nums; font-weight:600; }
+  label.chk { display:flex; align-items:center; gap:6px; font-size:12.5px; color:#1f2937; text-transform:none; letter-spacing:0; margin:8px 0 2px; cursor:pointer; }
+  .seg { display:flex; border:1px solid var(--azul); border-radius:4px; overflow:hidden; }
+  .seg button { flex:1; border-radius:0; padding:7px 4px; font-size:12px; background:#fff; color:var(--azul); border:0; border-right:1px solid var(--azul); cursor:pointer; font-weight:400; }
+  .seg button:last-child { border-right:0; }
+  .seg button.act { background:var(--azul); color:#fff; font-weight:600; }
+  .ayudaSec { font-size:11px; color:#6b7280; margin-top:3px; }
+  .fecha { margin-top:8px; font-size:12.5px; color:var(--azul); background:#e8f3f1; border-left:3px solid #e8622c; padding:6px 8px; border-radius:3px; }
+  .fecha:empty { display:none; }
+  .fecha span { font-size:11px; color:#4b5563; }
+  .tit { font-size:11px; font-weight:700; color:var(--azul); text-transform:uppercase; letter-spacing:.03em; margin-bottom:4px; }
+  table.ley td, table.ley th { padding:3px 3px; }
+  table.ley td:first-child { white-space:nowrap; }
+  table.ley .sw { display:inline-block; vertical-align:-2px; margin-right:6px; }
+  table.ley tr.vacia td { color:#9ca3af; }
+  table.ley tr.tot td { font-weight:700; border-top:1px solid #9ca3af; border-bottom:none; }
+  td.accs { white-space:nowrap; text-align:right; width:52px; }
+  button.ico { flex:none; padding:2px 4px; margin-left:2px; line-height:0; border-color:#c7cdd6; }
+  button.ico:hover { background:#e8f3f1; border-color:var(--azul); }
+  .acum { display:flex; align-items:center; gap:6px; font-size:11.5px; margin:3px 0; }
+  .acum .en { width:58px; }
+  .acum .bar { flex:1; height:8px; background:#e5e7eb; border-radius:2px; overflow:hidden; }
+  .acum .bar span { display:block; height:100%; }
+  .acum .vl { width:150px; text-align:right; font-variant-numeric:tabular-nums; color:#374151; }
+  .nota { font-size:11px; color:#6b7280; margin-top:8px; display:flex; align-items:center; gap:3px; flex-wrap:wrap; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; font-size:11px; color:#6b7280; border-bottom:1px solid var(--borde); padding:4px 3px; position:sticky; top:0; background:#fff; }
+  td { padding:4px 2px; border-bottom:1px solid #eef0f3; font-variant-numeric: tabular-nums; }
+  td.num, th.num { text-align:center; }
+  tr.click { cursor:pointer; } tr.click:hover { background:var(--gris); }
+  .barra { display:flex; height:8px; border-radius:2px; overflow:hidden; min-width:36px; background:#e5e7eb; }
+  .tablaWrap { max-height:340px; overflow:auto; }
+  details summary { cursor:pointer; color:var(--azul); font-weight:600; }
+  pre { white-space:pre-wrap; font-size:11px; background:var(--gris); padding:6px; border-radius:4px; max-height:240px; overflow:auto; }
+  .aviso { font-size:11px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; padding:6px; border-radius:4px; margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Planos entregados</h1>
+  <small>NABLA Acero · revisión de planos vs listado · v1.0</small>
+</header>
+
+<section>
+  <label for="proyecto">Proyecto</label>
+  <input type="text" id="proyecto" placeholder="ej. 1256">
+  <label for="fuente">Origen de la revisión</label>
+  <select id="fuente">
+    <option value="tc">Excel en Trimble Connect (5.3_LISTADOS)</option>
+    <option value="csv">Excel de mi computadora</option>
+  </select>
+  <label>Colorear por</label>
+  <input type="hidden" id="vista" value="ensambles">
+  <div class="seg" id="grupoVista">
+    <button type="button" data-v="ensambles">Ensambles</button>
+    <button type="button" data-v="piezas">Piezas sueltas</button>
+  </div>
+  <input type="hidden" id="orden" value="xy">
+  <label>Piezas a mostrar</label>
+  <input type="hidden" id="filtroSec" value="todo">
+  <div class="seg" id="grupoSec">
+    <button type="button" data-f="todo">Todas</button>
+    <button type="button" data-f="sin">Est. principal</button>
+    <button type="button" data-f="solo">Solo secundarios</button>
+  </div>
+  <div class="ayudaSec" id="txtSec"></div>
+  <div id="cajaCSV" style="display:none">
+    <label for="archivo">Excel de revisión de planos (.xlsm)</label>
+    <input type="file" id="archivo" accept=".xlsx,.xlsm,.xls">
+  </div>
+  <div class="fila">
+    <button class="prim" id="btnColorear">Colorear planos</button>
+    <button id="btnReset">Quitar colores</button>
+  </div>
+  <div id="fechaAvance" class="fecha"></div>
+  <div id="estado" style="margin-top:6px"></div>
+</section>
+
+<section>
+  <div class="leyenda" id="leyenda"></div>
+</section>
+
+<section>
+  <input type="text" id="filtro" placeholder="Buscar marca…">
+  <div class="tablaWrap" style="margin-top:6px">
+    <table>
+      <thead><tr id="encTabla"></tr></thead>
+      <tbody id="cuerpo"></tbody>
+    </table>
+  </div>
+  <div id="noEncontradas"></div>
+</section>
+
+<section>
+  <details>
+    <summary>Diagnóstico</summary>
+    <p style="font-size:12px">Selecciona una pieza en el modelo y presiona el botón para ver en qué propiedad está su marca.</p>
+    <button id="btnDiag">Ver propiedades de la selección</button>
+    <pre id="diag"></pre>
+  </details>
+</section>
+
+<script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
+<script src="xlsx.full.min.js"></script>
+<script src="config.js?v=1.0"></script>
+<script src="logica.js?v=1.0"></script>
+<script src="app.js?v=1.0"></script>
+</body>
+</html>
