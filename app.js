@@ -11,6 +11,26 @@
   var temporizador = null, ultimoArchivo = "", fechaAvance = null;
   var tokTC = null, esperaTok = null, baseTC = null, todosIds = [];
   var $ = function (id) { return document.getElementById(id); };
+  var pzDe = {}, pesoDe = {};   // objeto del modelo -> marca de pieza / peso
+
+  // Vista "Ensamble + piezas": cada pieza combina el estado del plano de su ensamble y el de su propio plano
+  var COMB = [
+    { nombre: "No está en la revisión",                 color: "#BDBDBD" },
+    { nombre: "Falta plano de ensamble y de pieza",     color: "#D93025" },
+    { nombre: "Por revisar / falta NC",                 color: "#F28C28" },
+    { nombre: "Falta plano de pieza (ensamble con plano)", color: "#8E44AD" },
+    { nombre: "Pieza con plano · falta plano de ensamble", color: "#F2C500" },
+    { nombre: "Ensamble y pieza con plano",             color: "#2EAA4A" }
+  ];
+  function categoria(E, P) {
+    if (!E && !P) return 0;
+    if (!P) P = E; if (!E) E = P === 3 ? 1 : P;      // sin dato de uno: se toma el del otro
+    if (E === 2 || P === 2) return 2;
+    if (E === 3 && P === 3) return 5;
+    if (E === 3) return 3;
+    if (P === 3) return 4;
+    return 1;
+  }
 
   function estado(txt, error) {
     var e = $("estado"); if (!e) return; e.textContent = txt || ""; e.className = error ? "error" : "";
@@ -52,7 +72,7 @@
     var modelos = await API.viewer.getObjects();
     todosIds = modelos.map(function (m) { return { modelId: m.modelId, objectRuntimeIds: (m.objects || []).map(function (o) { return o.id; }) }; });
     var asm = {}, partes = {}, asmSin = [], marcaPieza = {}, pesoObj = {};
-    var total = 0; tornillos = []; var pzIdx = {};
+    var total = 0; tornillos = []; var pzIdx = {}; pzDe = {}; pesoDe = pesoObj;
     for (var a = 0; a < modelos.length; a++) {
       var mid = modelos[a].modelId;
       var ids = (modelos[a].objects || []).map(function (o) { return o.id; });
@@ -65,7 +85,7 @@
           if (pw) pesoObj[mid + ":" + o.id] = pw;
           if (String(o.class || "").toUpperCase().indexOf("ASSEMBLY") < 0) {
             var pz = L.marcaDeObjeto(o, C.propiedadesPieza || []);
-            if (pz) (pzIdx[pz] = pzIdx[pz] || []).push({ modelId: mid, id: o.id, peso: pw || 0 });
+            if (pz) { (pzIdx[pz] = pzIdx[pz] || []).push({ modelId: mid, id: o.id, peso: pw || 0 }); pzDe[mid + ":" + o.id] = pz; }
           }
           var marca = L.marcaDeObjeto(o, C.propiedadesMarca);
           var esAsm = String(o.class || "").toUpperCase().indexOf("ASSEMBLY") >= 0;
@@ -417,8 +437,15 @@
   // filas del Excel -> { marca: [0,0,N] } en el formato que usa repartir(), según la vista
   function estadosDe(filas, vista) {
     var sumas = {}, info = {}, n = C.etapas.length;
-    filas.forEach(function (x) {
+    filas.forEach(function (x0) {
+      var x = x0;
       var esEns = /^ENSAMBLE/.test(x.tipo), esPz = /^PIEZA/.test(x.tipo);
+      // "MARCA ÚNICA": ensamble de una sola pieza, ej. "P6008 / U21" (ensamble P6008 = pieza U21)
+      if (/^MARCA\s*UNICA|^MARCA\s*ÚNICA/.test(x.tipo)) {
+        var dos = String(x.marca).split("/").map(function (t) { return L.normalizarMarca(t); }).filter(Boolean);
+        x = Object.assign({}, x, { marca: vista === "piezas" ? (dos[1] || dos[0]) : dos[0] });
+        esEns = esPz = true;
+      }
       if (vista === "piezas" ? !esPz : !esEns) return;
       var e = 0;
       for (var i = 0; i < C.resultados.length && !e; i++) if (new RegExp(C.resultados[i].patron, "i").test(x.resultado)) e = C.resultados[i].estado;
@@ -536,6 +563,7 @@
       var fu = $("fuente").value;
       filas = fu === "sp" ? await leerSharePoint() : fu === "tc" ? await leerTrimble() : await leerArchivo();
       var vista = $("vista").value;
+      if (vista === "combinado") return await colorearCombinado(proyecto);
       var IDX = vista === "piezas" ? indicePiezas : indice;
       var sumas = estadosDe(filas, vista);
       var colores = [C.colorSinAvance].concat(C.etapas.map(function (e) { return e.color; }));
@@ -589,6 +617,63 @@
     }
   }
 
+  function estadoNum(s) { return s ? s.indexOf(1e9) + 1 : 0; }
+
+  async function colorearCombinado(proyecto) {
+    var sumE = estadosDe(filas, "ensambles"), infoE = infoMarca;
+    var sumP = estadosDe(filas, "piezas"), infoP = infoMarca;
+    infoMarca = infoE;
+    var cubetas = COMB.map(function () { return []; }), resumen = [], ocultas = [], visibles = [], modo = modoSec();
+    if (modo !== "todo" && C.ocultarTornillos !== false) Array.prototype.push.apply(ocultas, tornillos);
+    Object.keys(indice).sort().forEach(function (m) {
+      if (oculta(m)) { if (modo === "sin") Array.prototype.push.apply(ocultas, indice[m]); return; }
+      if (modo === "solo") Array.prototype.push.apply(visibles, indice[m]);
+      var E = estadoNum(sumE[m]), kgTot = 0, pzOk = 0, pzTot = 0, cats = {}, faltan = {};
+      indice[m].forEach(function (inst) {
+        var ids = inst.ids || [inst.id], desde = inst.asm && inst.ids ? 1 : 0;
+        if (ids.length <= desde || inst.rec) {          // sin piezas conocidas: vale el estado del ensamble
+          var c0 = categoria(E, 0), kg0 = inst.peso || 0;
+          cubetas[c0].push(inst); kgTot += kg0; cats[c0] = 1; return;
+        }
+        if (desde) cubetas[categoria(E, 0)].push({ modelId: inst.modelId, id: ids[0] });   // objeto ensamble
+        for (var i = desde; i < ids.length; i++) {
+          var k = inst.modelId + ":" + ids[i], pm = pzDe[k], P = pm ? estadoNum(sumP[pm]) : 0;
+          var c = categoria(E, P), kg = pesoDe[k] || 0;
+          cubetas[c].push({ modelId: inst.modelId, id: ids[i], peso: kg });
+          kgTot += kg; pzTot++; cats[c] = 1;
+          if ((P || E) === 3) pzOk++; else if (pm) faltan[pm] = 1;
+        }
+      });
+      resumen.push({ marca: m, total: indice[m].length, kgTot: kgTot, e: E, pzOk: pzOk, pzTot: pzTot, faltan: Object.keys(faltan) });
+    });
+    estado("Aplicando colores…");
+    await API.viewer.setObjectState(undefined, { color: "reset", visible: "reset" });
+    if (C.atenuarResto) await API.viewer.setObjectState(undefined, { color: { r: 225, g: 225, b: 225, a: 70 } });
+    for (var c = 0; c < COMB.length; c++) {
+      if (cubetas[c].length) await API.viewer.setObjectState(selector(cubetas[c]), { color: L.rgba(COMB[c].color, 255) });
+    }
+    resumen.sort(function (x, y) {
+      var fx = x.pzTot - x.pzOk, fy = y.pzTot - y.pzOk;
+      if ((x.e === 3) !== (y.e === 3)) return x.e === 3 ? 1 : -1;
+      if (fx !== fy) return fy - fx;
+      return x.marca < y.marca ? -1 : 1;
+    });
+    var noEnc = Object.keys(sumE).filter(function (m) { return !indice[m] && !oculta(m); });
+    ultimo = { idx: indice, vista: "combinado", info: infoE, infoP: infoP, resumen: resumen, noEnc: noEnc, cubetas: cubetas,
+               colores: COMB.map(function (x) { return x.color; }), nombres: COMB.map(function (x) { return x.nombre; }),
+               ocultas: ocultas, visibles: visibles, modo: modo };
+    await aplicarFiltro();
+    pintarPanel();
+    var fr = fechaRevision || fechaAvance;
+    $("fechaAvance").innerHTML = fr
+      ? "Revisión al <b>" + fr.toLocaleString("es-GT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) +
+        "</b><br><span>" + (fechaRevision ? "«Revisado» de " : "fecha del archivo ") + ultimoArchivo + "</span>"
+      : (ultimoArchivo ? "Archivo: " + ultimoArchivo : "");
+    estado("Leído a las " + new Date().toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" }) + " · " + resumen.length +
+      " ensambles en el modelo" + textoFiltro() + " · " + Object.keys(sumE).length + " ensambles y " + Object.keys(sumP).length + " piezas en la revisión.");
+    programarAuto();
+  }
+
   function programarAuto() {
     if (temporizador) clearInterval(temporizador);
     if ($("fuente").value !== "csv" && C.autoActualizarMin > 0) {
@@ -609,7 +694,36 @@
   var ICO_SEL = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 3l7 17 2.5-7.5L21 10z"/></svg>';
   var ICO_OJO = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 
+  function pintarLeyendaComb() {
+    var u = ultimo, cuentas = [], kgs = [], kgTot = 0, pzTot = 0;
+    u.cubetas.forEach(function (l, i) {
+      var lst = l.filter(function (x) { return x.peso !== undefined || x.ids; });
+      cuentas[i] = lst.length;
+      kgs[i] = lst.reduce(function (a, x) { return a + (x.peso || 0); }, 0);
+      kgTot += kgs[i]; pzTot += cuentas[i];
+    });
+    var pct = function (kg) { return kgTot ? (100 * kg / kgTot).toFixed(1) + "%" : ""; };
+    var orden = [5, 4, 3, 2, 1, 0];
+    var html = '<div class="tit">Estado de planos · ensamble + piezas</div>' +
+      '<table class="ley"><thead><tr><th>Estado de cada pieza</th><th class="num">Pzas</th><th class="num">Ton</th><th class="num">% peso</th><th></th></tr></thead><tbody>' +
+      orden.map(function (i) {
+        var acc = cuentas[i]
+          ? '<button class="ico" data-sel="' + i + '" title="Seleccionar en el modelo">' + ICO_SEL + "</button>" +
+            '<button class="ico" data-solo="' + i + '" title="Mostrar solo estas piezas">' + ICO_OJO + "</button>" : "";
+        return "<tr" + (!cuentas[i] ? ' class="vacia"' : "") + '><td><span class="sw" style="background:' + u.colores[i] + '"></span>' + u.nombres[i] +
+          '</td><td class="num">' + cuentas[i] + '</td><td class="num">' + ton(kgs[i]) + '</td><td class="num">' + pct(kgs[i]) +
+          '</td><td class="accs">' + acc + "</td></tr>";
+      }).join("") +
+      '<tr class="tot"><td>Total piezas en modelo</td><td class="num">' + pzTot + '</td><td class="num">' + ton(kgTot) +
+      '</td><td class="num">100%</td><td class="accs"><button class="ico" id="btnTodo" title="Volver a mostrar todo el modelo">' + ICO_OJO + "</button></td></tr>" +
+      "</tbody></table>" +
+      '<div class="nota">Cada pieza se pinta según el plano de su ensamble y su propio plano (PDF/NC de pieza). ' + ICO_SEL + " selecciona · " + ICO_OJO + " muestra solo</div>";
+    $("leyenda").innerHTML = html;
+    $("encTabla").innerHTML = "<th>Ensamble</th><th class='num'>Cant</th><th class='num'>Ton</th><th>Plano ensamble</th><th class='num' title='Piezas del ensamble con plano'>Pzas c/plano</th>";
+  }
+
   function pintarLeyenda() {
+    if (ultimo && ultimo.vista === "combinado") return pintarLeyendaComb();
     var nombres = [C.nombreSinDato].concat(C.etapas.map(function (e) { return e.nombre; }));
     var colores = [C.colorSinAvance].concat(C.etapas.map(function (e) { return e.color; }));
     var cuentas = colores.map(function () { return 0; }), kgs = colores.map(function () { return 0; }), kgTot = 0, pzTot = 0;
@@ -655,6 +769,23 @@
     var f = $("filtro").value.trim().toUpperCase();
     var colores = ultimo.colores;
     var fmtF = function (d) { return d instanceof Date && !isNaN(d) ? d.toLocaleDateString("es-GT", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""; };
+    if (ultimo.vista === "combinado") {
+      var colE = [C.colorSinAvance].concat(C.etapas.map(function (e) { return e.color; }));
+      $("cuerpo").innerHTML = ultimo.resumen.filter(function (r) { return !f || r.marca.indexOf(f) >= 0; })
+        .map(function (r) {
+          var inf = ultimo.info[r.marca], nom = r.e ? C.etapas[r.e - 1].nombre : C.nombreSinDato;
+          var tip = (inf ? inf.res + (inf.plano ? " · " + inf.plano : "") : "El ensamble no aparece en el Excel") +
+            (r.faltan.length ? " · piezas sin plano: " + r.faltan.join(", ") : "");
+          var todas = r.pzTot && r.pzOk === r.pzTot;
+          return '<tr class="click" data-m="' + r.marca + '" title="' + String(tip).replace(/"/g, "'") + '"' + (r.e || r.pzOk ? "" : ' style="color:#9ca3af"') + "><td>" +
+            r.marca + "</td><td class='num'>" + r.total + "</td><td class='num'>" + (r.kgTot ? ton(r.kgTot) : "") + "</td>" +
+            '<td style="white-space:nowrap"><span class="sw" style="display:inline-block;vertical-align:-2px;margin-right:4px;background:' + colE[r.e] + '"></span>' + nom + "</td>" +
+            "<td class='num' style='white-space:nowrap;" + (r.pzTot ? (todas ? "color:#2EAA4A" : "color:#D93025") : "") + "'>" + (r.pzTot ? r.pzOk + "/" + r.pzTot : "") + "</td></tr>";
+        }).join("");
+      $("noEncontradas").innerHTML = ultimo.noEnc.length
+        ? '<div class="aviso">En la revisión de planos pero no encontradas en los modelos cargados: ' + ultimo.noEnc.join(", ") + "</div>" : "";
+      return;
+    }
     $("cuerpo").innerHTML = ultimo.resumen.filter(function (r) { return !f || r.marca.indexOf(f) >= 0; })
       .map(function (r) {
         var inf = ultimo.info[r.marca], e = inf ? inf.e : 0;
@@ -696,7 +827,7 @@
       if (solo && ultimo.ocultas.length) await API.viewer.setObjectState(selector(ultimo.ocultas), { visible: false });
       await API.viewer.setSelection(sel, "set");
       await API.viewer.setCamera(sel, { animationTime: 400 });
-      var nombre = i === 0 ? C.nombreSinDato : C.etapas[i - 1].nombre;
+      var nombre = ultimo.nombres ? ultimo.nombres[i] : (i === 0 ? C.nombreSinDato : C.etapas[i - 1].nombre);
       var kg = ultimo.cubetas[i].reduce(function (s, x) { return s + (x.peso || 0); }, 0);
       estado((solo ? "Mostrando solo " : "Seleccionadas: ") + nombre + " · " + ultimo.cubetas[i].length + " piezas · " + ton(kg) + " t");
     } catch (e) { estado("No se pudo seleccionar: " + (e.message || e), true); }
@@ -775,7 +906,8 @@
     $("vista").value = v;
     Array.prototype.forEach.call(document.querySelectorAll("#grupoVista button"), function (b) { b.classList.toggle("act", b.dataset.v === v); });
   }
-  marcarVista(leerLocal("vista") === "piezas" ? "piezas" : "ensambles");
+  var v0 = leerLocal("vista");
+  marcarVista(v0 === "combinado" ? "combinado" : "ensambles");
   $("grupoVista").addEventListener("click", function (ev) {
     var b = ev.target.closest("button"); if (!b || b.dataset.v === $("vista").value) return;
     marcarVista(b.dataset.v); guardarLocal("vista", b.dataset.v); if (ultimo) colorear(false);
