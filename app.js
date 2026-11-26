@@ -16,11 +16,11 @@
   // Vista "Ensamble + piezas": cada pieza combina el estado del plano de su ensamble y el de su propio plano
   var COMB = [
     { nombre: "No está en la revisión",                 color: "#BDBDBD" },
-    { nombre: "Falta plano de ensamble y de pieza",     color: "#D93025" },
+    { nombre: "Falta plano de ensamble y de habilitado", color: "#D93025" },
     { nombre: "Por revisar / falta NC",                 color: "#F28C28" },
-    { nombre: "Falta plano de pieza (ensamble con plano)", color: "#8E44AD" },
-    { nombre: "Pieza con plano · falta plano de ensamble", color: "#F2C500" },
-    { nombre: "Ensamble y pieza con plano",             color: "#2EAA4A" }
+    { nombre: "Con plano de ensamble · falta plano de habilitado", color: "#8E44AD" },
+    { nombre: "Con plano de habilitado · falta plano de ensamble", color: "#F2C500" },
+    { nombre: "Con plano de ensamble y de habilitado", color: "#2EAA4A" }
   ];
   function categoria(E, P) {
     if (!E && !P) return 0;
@@ -670,7 +670,7 @@
         "</b><br><span>" + (fechaRevision ? "«Revisado» de " : "fecha del archivo ") + ultimoArchivo + "</span>"
       : (ultimoArchivo ? "Archivo: " + ultimoArchivo : "");
     estado("Leído a las " + new Date().toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" }) + " · " + resumen.length +
-      " ensambles en el modelo" + textoFiltro() + " · " + Object.keys(sumE).length + " ensambles y " + Object.keys(sumP).length + " piezas en la revisión.");
+      " ensambles en el modelo" + textoFiltro() + " · " + Object.keys(sumE).length + " planos de ensamble y " + Object.keys(sumP).length + " de habilitado en la revisión.");
     programarAuto();
   }
 
@@ -704,8 +704,8 @@
     });
     var pct = function (kg) { return kgTot ? (100 * kg / kgTot).toFixed(1) + "%" : ""; };
     var orden = [5, 4, 3, 2, 1, 0];
-    var html = '<div class="tit">Estado de planos · ensamble + piezas</div>' +
-      '<table class="ley"><thead><tr><th>Estado de cada pieza</th><th class="num">Pzas</th><th class="num">Ton</th><th class="num">% peso</th><th></th></tr></thead><tbody>' +
+    var html = '<div class="tit">Estado de planos · ensamble + habilitado</div>' +
+      '<table class="ley"><thead><tr><th>Estado de cada pieza del modelo</th><th class="num">Pzas</th><th class="num">Ton</th><th class="num">% peso</th><th></th></tr></thead><tbody>' +
       orden.map(function (i) {
         var acc = cuentas[i]
           ? '<button class="ico" data-sel="' + i + '" title="Seleccionar en el modelo">' + ICO_SEL + "</button>" +
@@ -717,9 +717,9 @@
       '<tr class="tot"><td>Total piezas en modelo</td><td class="num">' + pzTot + '</td><td class="num">' + ton(kgTot) +
       '</td><td class="num">100%</td><td class="accs"><button class="ico" id="btnTodo" title="Volver a mostrar todo el modelo">' + ICO_OJO + "</button></td></tr>" +
       "</tbody></table>" +
-      '<div class="nota">Cada pieza se pinta según el plano de su ensamble y su propio plano (PDF/NC de pieza). ' + ICO_SEL + " selecciona · " + ICO_OJO + " muestra solo</div>";
+      '<div class="nota">Cada pieza se pinta según el <b>plano de ensamble</b> de su marca y su <b>plano de habilitado</b> (PDF/NC de la pieza). ' + ICO_SEL + " selecciona · " + ICO_OJO + " muestra solo</div>";
     $("leyenda").innerHTML = html;
-    $("encTabla").innerHTML = "<th>Ensamble</th><th class='num'>Cant</th><th class='num'>Ton</th><th>Plano ensamble</th><th class='num' title='Piezas del ensamble con plano'>Pzas c/plano</th>";
+    $("encTabla").innerHTML = "<th>Ensamble</th><th class='num'>Cant</th><th class='num'>Ton</th><th>Plano de ensamble</th><th class='num' title='Piezas del ensamble con plano de habilitado'>Habilitado</th>";
   }
 
   function pintarLeyenda() {
@@ -775,7 +775,7 @@
         .map(function (r) {
           var inf = ultimo.info[r.marca], nom = r.e ? C.etapas[r.e - 1].nombre : C.nombreSinDato;
           var tip = (inf ? inf.res + (inf.plano ? " · " + inf.plano : "") : "El ensamble no aparece en el Excel") +
-            (r.faltan.length ? " · piezas sin plano: " + r.faltan.join(", ") : "");
+            (r.faltan.length ? " · sin plano de habilitado: " + r.faltan.join(", ") : "");
           var todas = r.pzTot && r.pzOk === r.pzTot;
           return '<tr class="click" data-m="' + r.marca + '" title="' + String(tip).replace(/"/g, "'") + '"' + (r.e || r.pzOk ? "" : ' style="color:#9ca3af"') + "><td>" +
             r.marca + "</td><td class='num'>" + r.total + "</td><td class='num'>" + (r.kgTot ? ton(r.kgTot) : "") + "</td>" +
