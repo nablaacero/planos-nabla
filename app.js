@@ -437,6 +437,11 @@
   // filas del Excel -> { marca: [0,0,N] } en el formato que usa repartir(), según la vista
   function estadosDe(filas, vista) {
     var sumas = {}, info = {}, n = C.etapas.length;
+    // Filas de sub-ensambles ("ENSAMBLE SUB" / "PIEZA SUB"): solo se usan si la marca no está en el listado general
+    var esSub = function (x) { return /\bSUB\b/.test(x.tipo); };
+    var general = {};
+    filas.forEach(function (x) { if (!esSub(x)) String(x.marca).split("/").forEach(function (t) { general[L.normalizarMarca(t)] = 1; }); });
+    filas = filas.filter(function (x) { return !esSub(x) || !general[x.marca]; });
     filas.forEach(function (x0) {
       var x = x0;
       var esEns = /^ENSAMBLE/.test(x.tipo), esPz = /^PIEZA/.test(x.tipo);
